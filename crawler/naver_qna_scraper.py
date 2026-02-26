@@ -73,12 +73,12 @@ class NaverQnAScraper:
             pass
         await asyncio.sleep(1)
 
-        # 2단계: DOM에서 페이지별 Q&A 수집
+        # 2단계: DOM에서 페이지별 Q&A 수집 (각 항목 클릭하여 답변 추출)
         for pg in range(1, NAVER_MAX_QNA_PAGES + 1):
             if progress_cb:
                 progress_cb(f"Q&A 수집 중... (페이지 {pg})")
 
-            page_pairs = self._extract_qna_from_dom(browser.driver)
+            page_pairs = await self._extract_qna_from_dom(browser.driver)
 
             if not page_pairs:
                 break
@@ -114,38 +114,58 @@ class NaverQnAScraper:
 
         return all_pairs
 
-    def _extract_qna_from_dom(self, driver) -> list[dict]:
-        """현재 페이지 DOM에서 Q&A 추출. 클래스명 의존 없이 구조 기반.
+    async def _extract_qna_from_dom(self, driver) -> list[dict]:
+        """현재 페이지 DOM에서 Q&A 추출. 각 항목을 클릭하여 답변도 수집.
 
-        네이버 Q&A DOM 구조:
-        ul > li > div(컨테이너) > div*4:
-          - [0] 상태 ("답변완료"/"답변대기")
-          - [1] 질문 텍스트 (childCount=1, leaf-like)
-          - [2] 작성자 닉네임 (childCount=0)
-          - [3] 날짜 (childCount=0, "YYYY.MM.DD.")
+        네이버 Q&A DOM 구조 (접힌 상태):
+        ul > li > div > [상태div, 질문div(>a>span), 작성자div, 날짜div]
+
+        a 태그 클릭 시 답변이 펼쳐짐:
+        li > div(기존) + div(답변영역: 질문반복+신고+답변텍스트+신고+판매자+답변날짜)
         """
-        try:
-            pairs = driver.execute_script("""
-                var uls = document.querySelectorAll('ul');
-                var qnaUl = null;
-
-                for (var i = 0; i < uls.length; i++) {
-                    var lis = uls[i].querySelectorAll(':scope > li');
-                    if (lis.length >= 1 && lis.length <= 30) {
-                        var text = lis[0].textContent;
-                        if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
-                            && text.length > 20) {
-                            qnaUl = uls[i];
-                            break;
-                        }
+        # 1) Q&A UL 찾기 + 항목 수 확인
+        li_count = driver.execute_script("""
+            var uls = document.querySelectorAll('ul');
+            for (var i = 0; i < uls.length; i++) {
+                var lis = uls[i].querySelectorAll(':scope > li');
+                if (lis.length >= 1 && lis.length <= 30) {
+                    var text = lis[0].textContent;
+                    if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
+                        && text.length > 20) {
+                        return lis.length;
                     }
                 }
-                if (!qnaUl) return [];
+            }
+            return 0;
+        """)
+        if not li_count:
+            return []
 
-                var lis = qnaUl.querySelectorAll(':scope > li');
-                var results = [];
+        results = []
 
-                for (var idx = 0; idx < lis.length; idx++) {
+        # 2) 각 항목을 순회하며 클릭 → 답변 추출
+        for idx in range(li_count):
+            try:
+                # 접힌 상태에서 기본 정보 추출 + a 태그 클릭
+                basic = driver.execute_script("""
+                    var idx = arguments[0];
+                    var uls = document.querySelectorAll('ul');
+                    var qnaUl = null;
+                    for (var i = 0; i < uls.length; i++) {
+                        var lis = uls[i].querySelectorAll(':scope > li');
+                        if (lis.length >= 1 && lis.length <= 30) {
+                            var text = lis[0].textContent;
+                            if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
+                                && text.length > 20) {
+                                qnaUl = uls[i];
+                                break;
+                            }
+                        }
+                    }
+                    if (!qnaUl) return null;
+
+                    var lis = qnaUl.querySelectorAll(':scope > li');
+                    if (idx >= lis.length) return null;
                     var li = lis[idx];
                     var text = li.textContent;
 
@@ -155,73 +175,143 @@ class NaverQnAScraper:
                     var hasAnswer = /답변완료/.test(text);
                     var isSecret = /비밀글/.test(text);
 
-                    // 방법 1: leaf div 구조에서 추출
-                    // 각 li 안에 div들이 있고, childCount=0인 것이 leaf
                     var divs = li.querySelectorAll('div');
-                    var questionDiv = null;
-                    var authorDiv = null;
-                    var dateDiv = null;
-
                     for (var j = 0; j < divs.length; j++) {
                         var d = divs[j];
                         var t = d.textContent.trim();
                         if (!t) continue;
 
-                        // 날짜 패턴 (YY.MM.DD. 또는 YYYY.MM.DD.)
                         if (/^\\d{2,4}\\.\\d{2}\\.\\d{2}\\.?$/.test(t) && d.children.length === 0) {
-                            dateDiv = t;
+                            if (!qDate) qDate = t;
                             continue;
                         }
-                        // 닉네임 패턴 (짧고 leaf, 마스킹 포함)
                         if (d.children.length === 0 && t.length <= 20 && t.length >= 3
                             && /\\*/.test(t) && !/답변|비밀|신고/.test(t)) {
-                            authorDiv = t;
+                            if (!author) author = t;
                             continue;
                         }
-                        // 질문 텍스트 (가장 길고, 상태/메타가 아닌 것)
                         if (d.children.length <= 1 && t.length > 10
                             && !/^답변(완료|대기)$/.test(t)
                             && !/비밀글입니다/.test(t.substring(0, 10))
                             && !/신고|수정|삭제/.test(t.substring(0, 5))) {
-                            if (!questionDiv || t.length > questionDiv.length) {
-                                questionDiv = t;
-                            }
+                            if (t.length > question.length) question = t;
                         }
                     }
 
+                    if (!question && isSecret) question = '(비공개 문의)';
+
+                    // a 태그 클릭하여 답변 펼치기 (비공개가 아닌 경우)
+                    var clickedA = false;
+                    if (hasAnswer && !isSecret) {
+                        var a = li.querySelector('a');
+                        if (a) { a.click(); clickedA = true; }
+                    }
+
                     // 날짜 변환
-                    if (dateDiv) {
-                        var d = dateDiv.replace(/\\./g, '-').replace(/-$/, '');
-                        if (d.length <= 8) d = '20' + d;
-                        qDate = d;
+                    var dateStr = '';
+                    if (qDate) {
+                        dateStr = qDate.replace(/\\./g, '-').replace(/-$/, '');
+                        if (dateStr.length <= 8) dateStr = '20' + dateStr;
                     }
 
-                    // 질문 설정
-                    if (questionDiv) {
-                        question = questionDiv;
-                    } else if (isSecret) {
-                        question = '(비공개 문의)';
-                    }
+                    return {
+                        question: question,
+                        author: author,
+                        q_date: dateStr,
+                        hasAnswer: hasAnswer,
+                        isSecret: isSecret,
+                        clickedA: clickedA,
+                        prevLen: text.length
+                    };
+                """, idx)
 
-                    // 작성자
-                    author = authorDiv || '';
+                if not basic or not basic.get("question"):
+                    continue
 
-                    if (question) {
-                        results.push({
-                            question: question,
-                            answer: hasAnswer ? '(답변완료)' : '',
-                            q_date: qDate,
-                            a_date: '',
-                            seller: '',
-                            author: author
-                        });
-                    }
-                }
-                return results;
-            """)
-            return pairs or []
-        except Exception:
-            return []
+                answer = ""
+                a_date = ""
+                seller = ""
+
+                # 클릭했으면 답변 펼쳐질 때까지 대기 후 추출
+                if basic.get("clickedA"):
+                    await asyncio.sleep(0.8)
+
+                    expanded = driver.execute_script("""
+                        var idx = arguments[0];
+                        var uls = document.querySelectorAll('ul');
+                        var qnaUl = null;
+                        for (var i = 0; i < uls.length; i++) {
+                            var lis = uls[i].querySelectorAll(':scope > li');
+                            if (lis.length >= 1 && lis.length <= 30) {
+                                var text = lis[0].textContent;
+                                if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
+                                    && text.length > 20) {
+                                    qnaUl = uls[i];
+                                    break;
+                                }
+                            }
+                        }
+                        if (!qnaUl) return null;
+
+                        var lis = qnaUl.querySelectorAll(':scope > li');
+                        if (idx >= lis.length) return null;
+                        var li = lis[idx];
+
+                        // 펼쳐진 후 답변 영역에서 추출
+                        var divs = li.querySelectorAll('div');
+                        var answer = '';
+                        var aDate = '';
+                        var seller = '';
+                        var foundAnswerSection = false;
+
+                        for (var j = 0; j < divs.length; j++) {
+                            var d = divs[j];
+                            var t = d.textContent.trim();
+
+                            // "답변" 접두사가 있는 div에서 답변 텍스트 추출
+                            if (/^답변/.test(t) && t.length > 4 && d.children.length <= 3) {
+                                // "답변" 제거 + "신고" 이후 제거
+                                var ansText = t.substring(2);
+                                var reportIdx = ansText.indexOf('신고');
+                                if (reportIdx > 0) ansText = ansText.substring(0, reportIdx);
+                                if (ansText.length > answer.length) {
+                                    answer = ansText.trim();
+                                    foundAnswerSection = true;
+                                }
+                            }
+                            // 판매자 (leaf div)
+                            if (d.children.length === 0 && t === '판매자') {
+                                seller = '판매자';
+                            }
+                            // 답변 날짜 (두 번째 날짜)
+                            if (foundAnswerSection && d.children.length === 0
+                                && /^\\d{2,4}\\.\\d{2}\\.\\d{2}\\.?$/.test(t)) {
+                                aDate = t.replace(/\\./g, '-').replace(/-$/, '');
+                                if (aDate.length <= 8) aDate = '20' + aDate;
+                            }
+                        }
+
+                        return {answer: answer, a_date: aDate, seller: seller};
+                    """, idx)
+
+                    if expanded:
+                        answer = expanded.get("answer", "")
+                        a_date = expanded.get("a_date", "")
+                        seller = expanded.get("seller", "")
+
+                results.append({
+                    "question": basic["question"],
+                    "answer": answer,
+                    "q_date": basic.get("q_date", ""),
+                    "a_date": a_date,
+                    "seller": seller,
+                    "author": basic.get("author", ""),
+                })
+
+            except Exception:
+                continue
+
+        return results
 
     def _click_page_number(self, driver, page_num: int) -> bool:
         """페이지 번호 링크 클릭."""
