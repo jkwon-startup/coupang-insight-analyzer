@@ -329,8 +329,23 @@ class NaverBrowserCloud:
         return "error"
 
     async def extract_page_data_json(self) -> dict | None:
+        """페이지 데이터 추출. __PRELOADED_STATE__ 우선, __NEXT_DATA__ fallback."""
         if self._next_data is not None:
             return self._next_data
+
+        # 1) __PRELOADED_STATE__ (Redux) — 현재 네이버 스마트스토어 방식
+        try:
+            preloaded = self.driver.execute_script(
+                'try { return typeof __PRELOADED_STATE__ !== "undefined" '
+                '? {_source: "preloaded", state: true} : null; } catch(e) { return null; }'
+            )
+            if preloaded:
+                self._next_data = {"_source": "preloaded"}
+                return self._next_data
+        except Exception:
+            pass
+
+        # 2) __NEXT_DATA__ (Next.js SSR) — fallback
         try:
             script = self.driver.execute_script(
                 'var el = document.querySelector("script#__NEXT_DATA__");'
@@ -341,9 +356,84 @@ class NaverBrowserCloud:
                 return self._next_data
         except Exception:
             pass
+
         return None
 
+    async def extract_page_ids(self) -> dict:
+        """__PRELOADED_STATE__에서 channelNo, productId 추출."""
+        try:
+            ids = self.driver.execute_script("""
+                try {
+                    var s = __PRELOADED_STATE__;
+                    var sp = s.simpleProductForDetailPage && s.simpleProductForDetailPage.A;
+                    if (sp) return {
+                        channelNo: sp.channel ? String(sp.channel.channelNo) : null,
+                        productId: sp.id ? String(sp.id) : null
+                    };
+                    var bs = s.brandStore && s.brandStore.A;
+                    if (bs && bs.channelNo) return {
+                        channelNo: String(bs.channelNo), productId: null
+                    };
+                } catch(e) {}
+                return null;
+            """)
+            if ids and ids.get("channelNo"):
+                return ids
+        except Exception:
+            pass
+        return {"channelNo": None, "productId": None}
+
+    async def click_tab(self, keyword: str) -> bool:
+        """'리뷰', 'Q&A' 등 탭을 텍스트로 찾아 클릭."""
+        try:
+            clicked = self.driver.execute_script("""
+                var keyword = arguments[0];
+                var links = document.querySelectorAll('a');
+                var re = new RegExp('^' + keyword + '\\\\d');
+                for (var i = 0; i < links.length; i++) {
+                    var text = links[i].textContent.trim();
+                    if (re.test(text)) { links[i].click(); return text; }
+                }
+                for (var i = 0; i < links.length; i++) {
+                    var text = links[i].textContent.trim();
+                    if (text.startsWith(keyword) && text.length < 20
+                        && !text.includes('이벤트') && !text.includes('보기')) {
+                        links[i].click(); return text;
+                    }
+                }
+                return null;
+            """, keyword)
+            if clicked:
+                await asyncio.sleep(3)
+                return True
+        except Exception:
+            pass
+        return False
+
     def get_merchant_no(self, next_data: dict) -> str | None:
+        """merchantNo(channelNo) 추출. __PRELOADED_STATE__ 우선."""
+        # __PRELOADED_STATE__ 방식
+        if next_data and next_data.get("_source") == "preloaded":
+            try:
+                ids = self.driver.execute_script("""
+                    try {
+                        var s = __PRELOADED_STATE__;
+                        var sp = s.simpleProductForDetailPage && s.simpleProductForDetailPage.A;
+                        if (sp && sp.channel) return String(sp.channel.channelNo);
+                        var bs = s.brandStore && s.brandStore.A;
+                        if (bs) return String(bs.channelNo);
+                    } catch(e) {}
+                    return null;
+                """)
+                if ids:
+                    return ids
+            except Exception:
+                pass
+            return None
+
+        # __NEXT_DATA__ fallback
+        if not next_data:
+            return None
         try:
             props = next_data.get("props", {}).get("pageProps", {})
             for key in ["channel", "store", "merchantInfo"]:
@@ -365,6 +455,27 @@ class NaverBrowserCloud:
         return None
 
     def get_origin_product_no(self, next_data: dict) -> str | None:
+        """originProductNo(productId) 추출. __PRELOADED_STATE__ 우선."""
+        # __PRELOADED_STATE__ 방식
+        if next_data and next_data.get("_source") == "preloaded":
+            try:
+                pid = self.driver.execute_script("""
+                    try {
+                        var sp = __PRELOADED_STATE__.simpleProductForDetailPage
+                                 && __PRELOADED_STATE__.simpleProductForDetailPage.A;
+                        if (sp && sp.id) return String(sp.id);
+                    } catch(e) {}
+                    return null;
+                """)
+                if pid:
+                    return pid
+            except Exception:
+                pass
+            return None
+
+        # __NEXT_DATA__ fallback
+        if not next_data:
+            return None
         try:
             props = next_data.get("props", {}).get("pageProps", {})
             for key in ["originProductNo", "productNo"]:
