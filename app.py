@@ -280,7 +280,7 @@ def _make_coupang_crawl(product_info, do_story, do_review, do_qna, do_full, prog
                         20 + int(pct * 0.25), text=msg
                     ),
                 )
-                status.success(f"리뷰 {len(reviews)}건 수집 완료")
+                status.success(_review_summary(reviews))
 
             # Q&A 수집
             if do_qna or do_full:
@@ -290,7 +290,7 @@ def _make_coupang_crawl(product_info, do_story, do_review, do_qna, do_full, prog
                     browser.page,
                     lambda msg: status.info(msg),
                 )
-                status.success(f"Q&A {len(qna_pairs)}건 수집 완료")
+                status.success(_qna_summary(qna_pairs))
 
             return (product_data, reviews, qna_pairs)
         finally:
@@ -351,7 +351,7 @@ def _make_naver_crawl(product_info, do_story, do_review, do_qna, do_full, progre
                         20 + int(pct * 0.25), text=msg
                     ),
                 )
-                status.success(f"리뷰 {len(reviews)}건 수집 완료")
+                status.success(_review_summary(reviews))
 
             # Q&A 수집
             if do_qna or do_full:
@@ -363,13 +363,55 @@ def _make_naver_crawl(product_info, do_story, do_review, do_qna, do_full, progre
                     next_data,
                     lambda msg: status.info(msg),
                 )
-                status.success(f"Q&A {len(qna_pairs)}건 수집 완료")
+                status.success(_qna_summary(qna_pairs))
 
             return (product_data, reviews, qna_pairs)
         finally:
             await browser.close()
 
     return crawl
+
+
+def _review_summary(reviews: list) -> str:
+    """리뷰 수집 결과 요약 문자열 생성."""
+    if not reviews:
+        return "리뷰 0건 수집"
+    total = len(reviews)
+    rating_counts = {}
+    for r in reviews:
+        score = r.get("rating")
+        if score is not None:
+            key = int(round(float(score)))
+            rating_counts[key] = rating_counts.get(key, 0) + 1
+    parts = [f"리뷰 {total}건 수집"]
+    rating_strs = []
+    for star in (5, 4, 3, 2, 1):
+        cnt = rating_counts.get(star, 0)
+        if cnt > 0:
+            rating_strs.append(f"{star}점: {cnt}건")
+    if rating_strs:
+        parts.append(f"({' / '.join(rating_strs)})")
+    return " ".join(parts)
+
+
+def _qna_summary(qna_pairs: list) -> str:
+    """Q&A 수집 결과 요약 문자열 생성."""
+    if not qna_pairs:
+        return "상품 문의 0건 수집"
+    total = len(qna_pairs)
+    secret = sum(
+        1 for p in qna_pairs
+        if "(비공개" in p.get("question", "") or "비밀글" in p.get("question", "")
+    )
+    answered = sum(
+        1 for p in qna_pairs
+        if p.get("answer", "") and p.get("answer", "") not in ("", "(답변완료)")
+    )
+    parts = [f"전체 상품 문의 {total}건"]
+    if secret > 0:
+        parts.append(f"비밀글 {secret}건")
+    parts.append(f"확인답변 {answered}건")
+    return ", ".join(parts)
 
 
 def display_results(label, product_data, reviews, qna_pairs, res, do_story, do_review, do_qna, do_full):
@@ -385,13 +427,13 @@ def display_results(label, product_data, reviews, qna_pairs, res, do_story, do_r
         with st.expander("리뷰 분석", expanded=True):
             st.markdown(res["review"])
             if reviews:
-                st.caption(f"총 {len(reviews)}건의 리뷰를 분석했습니다.")
+                st.caption(_review_summary(reviews))
 
     if do_qna and res["qna"]:
         with st.expander("상품문의(Q&A) 분석", expanded=True):
             st.markdown(res["qna"])
             if qna_pairs:
-                st.caption(f"총 {len(qna_pairs)}건의 Q&A를 분석했습니다.")
+                st.caption(_qna_summary(qna_pairs))
 
     if do_full and res["full"]:
         with st.expander("종합 리포트", expanded=True):
