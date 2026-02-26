@@ -204,31 +204,62 @@ class NaverReviewScraper:
             return []
 
     def _click_page_number(self, driver, page_num: int) -> bool:
-        """페이지 번호 링크 클릭."""
+        """페이지 번호 링크 클릭. 화면에 보이는 링크만 클릭.
+        번호가 현재 블록에 없으면 '다음' 버튼을 클릭."""
         try:
             clicked = driver.execute_script("""
                 var num = arguments[0].toString();
                 var links = document.querySelectorAll('a');
+                var candidates = [];
+                var nextBtns = [];
+
                 for (var i = 0; i < links.length; i++) {
                     var text = links[i].textContent.trim();
+                    var rect = links[i].getBoundingClientRect();
+                    if (rect.width === 0 && rect.height === 0) continue;
+                    var style = window.getComputedStyle(links[i]);
+                    if (style.display === 'none' || style.visibility === 'hidden') continue;
+
                     if (text === num) {
-                        // 페이지네이션 영역 내의 링크인지 확인 (한 자리 숫자)
                         var parent = links[i].parentElement;
                         if (parent) {
                             var siblings = parent.querySelectorAll('a');
-                            // 주변에 다른 숫자 링크가 있으면 페이지네이션
                             var numCount = 0;
                             siblings.forEach(function(s) {
                                 if (/^\\d+$/.test(s.textContent.trim())) numCount++;
                             });
                             if (numCount >= 2) {
-                                links[i].click();
-                                return true;
+                                candidates.push(links[i]);
+                            }
+                        }
+                    }
+
+                    if (/^다음$/.test(text) || text === '>' || text === '›') {
+                        var parent = links[i].parentElement;
+                        if (parent) {
+                            var siblings = parent.querySelectorAll('a');
+                            var numCount = 0;
+                            siblings.forEach(function(s) {
+                                if (/^\\d+$/.test(s.textContent.trim())) numCount++;
+                            });
+                            if (numCount >= 2) {
+                                nextBtns.push(links[i]);
                             }
                         }
                     }
                 }
-                return false;
+
+                // 1순위: 페이지 번호 직접 클릭 (첫 번째 = 리뷰 영역)
+                if (candidates.length > 0) {
+                    candidates[0].click();
+                    return 'page';
+                }
+                // 2순위: "다음" 버튼 클릭
+                if (nextBtns.length > 0) {
+                    nextBtns[0].click();
+                    return 'next';
+                }
+                return '';
             """, page_num)
             return bool(clicked)
         except Exception:

@@ -130,7 +130,7 @@ class NaverQnAScraper:
                 var lis = uls[i].querySelectorAll(':scope > li');
                 if (lis.length >= 1 && lis.length <= 30) {
                     var text = lis[0].textContent;
-                    if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
+                    if ((/답변(완료|대기)|미답변/.test(text) || /비밀글/.test(text))
                         && text.length > 20) {
                         return lis.length;
                     }
@@ -155,7 +155,7 @@ class NaverQnAScraper:
                         var lis = uls[i].querySelectorAll(':scope > li');
                         if (lis.length >= 1 && lis.length <= 30) {
                             var text = lis[0].textContent;
-                            if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
+                            if ((/답변(완료|대기)|미답변/.test(text) || /비밀글/.test(text))
                                 && text.length > 20) {
                                 qnaUl = uls[i];
                                 break;
@@ -191,7 +191,7 @@ class NaverQnAScraper:
                             continue;
                         }
                         if (d.children.length <= 1 && t.length > 10
-                            && !/^답변(완료|대기)$/.test(t)
+                            && !/^(답변(완료|대기)|미답변)$/.test(t)
                             && !/비밀글입니다/.test(t.substring(0, 10))
                             && !/신고|수정|삭제/.test(t.substring(0, 5))) {
                             if (t.length > question.length) question = t;
@@ -244,7 +244,7 @@ class NaverQnAScraper:
                             var lis = uls[i].querySelectorAll(':scope > li');
                             if (lis.length >= 1 && lis.length <= 30) {
                                 var text = lis[0].textContent;
-                                if ((/답변(완료|대기)/.test(text) || /비밀글/.test(text))
+                                if ((/답변(완료|대기)|미답변/.test(text) || /비밀글/.test(text))
                                     && text.length > 20) {
                                     qnaUl = uls[i];
                                     break;
@@ -314,13 +314,23 @@ class NaverQnAScraper:
         return results
 
     def _click_page_number(self, driver, page_num: int) -> bool:
-        """페이지 번호 링크 클릭."""
+        """페이지 번호 링크 클릭. 화면에 보이는 링크만 클릭.
+        번호가 현재 블록에 없으면 '다음' 버튼을 클릭."""
         try:
             clicked = driver.execute_script("""
                 var num = arguments[0].toString();
                 var links = document.querySelectorAll('a');
+                var candidates = [];
+                var nextBtns = [];
+
                 for (var i = 0; i < links.length; i++) {
                     var text = links[i].textContent.trim();
+                    var rect = links[i].getBoundingClientRect();
+                    if (rect.width === 0 && rect.height === 0) continue;
+                    var style = window.getComputedStyle(links[i]);
+                    if (style.display === 'none' || style.visibility === 'hidden') continue;
+
+                    // 정확한 페이지 번호 매칭
                     if (text === num) {
                         var parent = links[i].parentElement;
                         if (parent) {
@@ -330,13 +340,40 @@ class NaverQnAScraper:
                                 if (/^\\d+$/.test(s.textContent.trim())) numCount++;
                             });
                             if (numCount >= 2) {
-                                links[i].click();
-                                return true;
+                                candidates.push(links[i]);
+                            }
+                        }
+                    }
+
+                    // "다음" 버튼 감지 (페이지네이션 영역 내)
+                    if (/^다음$/.test(text) || text === '>' || text === '›') {
+                        var parent = links[i].parentElement;
+                        if (parent) {
+                            var siblings = parent.querySelectorAll('a');
+                            var numCount = 0;
+                            siblings.forEach(function(s) {
+                                if (/^\\d+$/.test(s.textContent.trim())) numCount++;
+                            });
+                            if (numCount >= 2) {
+                                nextBtns.push(links[i]);
                             }
                         }
                     }
                 }
-                return false;
+
+                // 1순위: 페이지 번호 직접 클릭 (가장 아래쪽 = Q&A 영역)
+                if (candidates.length > 0) {
+                    var last = candidates[candidates.length - 1];
+                    last.click();
+                    return 'page';
+                }
+                // 2순위: "다음" 버튼 클릭 (페이지 블록 넘기기)
+                if (nextBtns.length > 0) {
+                    var last = nextBtns[nextBtns.length - 1];
+                    last.click();
+                    return 'next';
+                }
+                return '';
             """, page_num)
             return bool(clicked)
         except Exception:
