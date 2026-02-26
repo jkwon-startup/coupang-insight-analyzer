@@ -23,6 +23,8 @@ class FullReportAnalyzer:
             parts.append(f"## 상품 정보\n- 상품명: {product_data.get('title', 'N/A')}")
             if product_data.get("price"):
                 parts.append(f"- 가격: {product_data['price']}")
+            if product_data.get("rating"):
+                parts.append(f"- 평균 별점: {product_data['rating']}점")
             if product_data.get("review_count"):
                 parts.append(f"- 리뷰 수: {product_data['review_count']}건")
 
