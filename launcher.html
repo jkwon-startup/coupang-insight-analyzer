@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E-Commerce Insight Analyzer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 50%, #ff9a9e 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  .container {
+    text-align: center;
+    padding: 40px;
+  }
+
+  .logo {
+    font-size: 80px;
+    margin-bottom: 8px;
+    animation: bounce 2s ease infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  h1 {
+    font-size: 28px;
+    color: #2d3436;
+    margin-bottom: 6px;
+    font-weight: 800;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    color: #636e72;
+    margin-bottom: 40px;
+  }
+
+  .cards {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .card {
+    background: white;
+    border-radius: 24px;
+    padding: 36px 32px;
+    width: 260px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    text-decoration: none;
+    color: inherit;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.15);
+  }
+
+  .card-icon {
+    font-size: 56px;
+    margin-bottom: 16px;
+    display: block;
+  }
+
+  .card h2 {
+    font-size: 20px;
+    margin-bottom: 8px;
+    color: #2d3436;
+  }
+
+  .card p {
+    font-size: 13px;
+    color: #636e72;
+    line-height: 1.6;
+    margin-bottom: 20px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 12px 28px;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+    border: none;
+  }
+
+  .btn-local {
+    background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+    color: white;
+  }
+
+  .btn-local:hover { background: linear-gradient(135deg, #5b4cdb, #8c82fc); }
+
+  .btn-cloud {
+    background: linear-gradient(135deg, #fd79a8, #e84393);
+    color: white;
+  }
+
+  .btn-cloud:hover { background: linear-gradient(135deg, #e8608e, #d63384); }
+
+  .badge {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+
+  .badge-full {
+    background: #dfe6e9;
+    color: #636e72;
+  }
+
+  .badge-free {
+    background: #ffeaa7;
+    color: #d35400;
+  }
+
+  .footer {
+    margin-top: 48px;
+    font-size: 12px;
+    color: #b2bec3;
+  }
+
+  .platforms {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .platform-chip {
+    background: rgba(255,255,255,0.6);
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #2d3436;
+    backdrop-filter: blur(10px);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="logo">🏪</div>
+  <h1>E-Commerce Insight Analyzer</h1>
+  <p class="subtitle">AI가 분석하는 쿠팡 & 네이버 상품 인사이트</p>
+
+  <div class="platforms">
+    <span class="platform-chip">🛒 쿠팡</span>
+    <span class="platform-chip">🟢 네이버 스마트스토어</span>
+    <span class="platform-chip">✨ 네이버 브랜드스토어</span>
+  </div>
+
+  <div class="cards">
+    <!-- 로컬 버전 -->
+    <a class="card" href="http://localhost:8501" target="_blank">
+      <span class="badge badge-full">전체 기능</span>
+      <span class="card-icon">🖥️</span>
+      <h2>로컬 버전</h2>
+      <p>
+        내 컴퓨터에서 실행<br>
+        CAPTCHA 직접 해결 가능<br>
+        안정적인 데이터 수집
+      </p>
+      <span class="btn btn-local">localhost:8501 열기</span>
+    </a>
+
+    <!-- 클라우드 버전 -->
+    <a class="card" href="https://coupang-insight-analyzer.streamlit.app/" target="_blank">
+      <span class="badge badge-free">무료</span>
+      <span class="card-icon">☁️</span>
+      <h2>클라우드 버전</h2>
+      <p>
+        설치 없이 바로 사용<br>
+        어디서나 웹으로 접속<br>
+        CAPTCHA 시 안내 제공
+      </p>
+      <span class="btn btn-cloud">Cloud 열기</span>
+    </a>
+  </div>
+
+  <div class="footer">
+    <p>로컬 버전 실행: 터미널에서 <code style="background:#dfe6e9;padding:2px 8px;border-radius:4px;">streamlit run app.py</code> 입력 후 위 버튼 클릭</p>
+  </div>
+</div>
+
+</body>
+</html>

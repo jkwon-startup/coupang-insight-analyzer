@@ -19,8 +19,94 @@ from config.settings import (
     INITIAL_LOAD_WAIT, NAVER_INITIAL_LOAD_WAIT,
 )
 
-# 로컬 browser.py의 래퍼 클래스 재사용
-from crawler.browser import SeleniumPageWrapper, SeleniumElementWrapper
+
+class SeleniumPageWrapper:
+    """Selenium WebDriver를 Playwright page API와 호환되도록 감싸는 래퍼."""
+
+    def __init__(self, driver):
+        self.driver = driver
+
+    async def title(self):
+        return self.driver.title
+
+    async def wait_for_timeout(self, ms: int):
+        await asyncio.sleep(ms / 1000)
+
+    async def wait_for_selector(self, selector: str, timeout: int = 10000):
+        import time
+        end = time.time() + timeout / 1000
+        while time.time() < end:
+            try:
+                if selector.startswith("xpath="):
+                    el = self.driver.find_element(By.XPATH, selector[6:])
+                else:
+                    el = self.driver.find_element(By.CSS_SELECTOR, selector)
+                return SeleniumElementWrapper(el, self.driver)
+            except Exception:
+                await asyncio.sleep(0.5)
+        return None
+
+    async def query_selector(self, selector: str):
+        try:
+            if selector.startswith("xpath="):
+                el = self.driver.find_element(By.XPATH, selector[6:])
+            else:
+                el = self.driver.find_element(By.CSS_SELECTOR, selector)
+            return SeleniumElementWrapper(el, self.driver)
+        except Exception:
+            return None
+
+    async def query_selector_all(self, selector: str):
+        try:
+            if selector.startswith("xpath="):
+                els = self.driver.find_elements(By.XPATH, selector[6:])
+            else:
+                els = self.driver.find_elements(By.CSS_SELECTOR, selector)
+            return [SeleniumElementWrapper(e, self.driver) for e in els]
+        except Exception:
+            return []
+
+    async def evaluate(self, script: str):
+        return self.driver.execute_script(f"return {script}")
+
+
+class SeleniumElementWrapper:
+    """Selenium WebElement를 Playwright ElementHandle API로 감싸는 래퍼."""
+
+    def __init__(self, element, driver):
+        self._el = element
+        self._driver = driver
+
+    async def inner_text(self):
+        return self._el.text
+
+    async def get_attribute(self, name: str):
+        return self._el.get_attribute(name)
+
+    async def click(self):
+        self._driver.execute_script("arguments[0].click();", self._el)
+
+    async def scroll_into_view_if_needed(self):
+        self._driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'});", self._el
+        )
+
+    async def query_selector(self, selector: str):
+        try:
+            el = self._el.find_element(By.CSS_SELECTOR, selector)
+            return SeleniumElementWrapper(el, self._driver)
+        except Exception:
+            return None
+
+    async def query_selector_all(self, selector: str):
+        try:
+            if selector.startswith(":scope"):
+                els = self._el.find_elements(By.XPATH, "./*")
+                return [SeleniumElementWrapper(e, self._driver) for e in els]
+            els = self._el.find_elements(By.CSS_SELECTOR, selector)
+            return [SeleniumElementWrapper(e, self._driver) for e in els]
+        except Exception:
+            return []
 
 
 def _create_chrome_options() -> Options:
