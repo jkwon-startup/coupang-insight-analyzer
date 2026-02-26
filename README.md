@@ -5,6 +5,8 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)
 
+> **온라인 버전**: [Streamlit Community Cloud에서 바로 사용하기](https://coupang-insight-analyzer.streamlit.app/) (설치 없이 웹에서 실행)
+
 ## 주요 기능
 
 | 기능 | 설명 |
@@ -30,28 +32,40 @@ URL을 입력하면 플랫폼이 자동 감지됩니다.
 
 두 모델을 동시에 사용하여 결과를 비교할 수도 있습니다.
 
-## 설치 및 실행
+## 실행 방법
 
-### 사전 요구사항
+두 가지 모드로 사용할 수 있습니다.
+
+### 방법 1: 온라인 (Cloud) — 설치 없이 바로 사용
+
+[https://coupang-insight-analyzer.streamlit.app/](https://coupang-insight-analyzer.streamlit.app/)
+
+- 웹 브라우저에서 바로 사용 가능
+- 별도 설치 불필요
+- **제한사항**: 네이버 CAPTCHA 발생 시 자동 수집이 중단됩니다
+
+### 방법 2: 로컬 설치 — 전체 기능 사용
+
+#### 사전 요구사항
 
 - **Python 3.10** 이상
 - **Google Chrome** 브라우저 (최신 버전)
 - OpenAI 또는 Anthropic API 키
 
-### 1. 저장소 클론
+#### 1. 저장소 클론
 
 ```bash
 git clone https://github.com/jkwon-startup/coupang-insight-analyzer.git
 cd coupang-insight-analyzer
 ```
 
-### 2. 패키지 설치
+#### 2. 패키지 설치
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. 실행
+#### 3. 실행
 
 ```bash
 streamlit run app.py
@@ -59,7 +73,7 @@ streamlit run app.py
 
 브라우저에서 `http://localhost:8501`이 자동으로 열립니다.
 
-### 4. 사용 방법
+#### 4. 사용 방법
 
 1. 상품 URL을 입력합니다
 2. AI 모델을 선택하고 API 키를 입력합니다
@@ -69,17 +83,29 @@ streamlit run app.py
 6. 네이버에서 CAPTCHA가 뜨면 브라우저에서 직접 풀어주세요
 7. 분석이 완료되면 결과를 확인하고 다운로드합니다
 
+### 로컬 vs 클라우드 비교
+
+| | 로컬 (`app.py`) | 클라우드 (`app_cloud.py`) |
+|---|---|---|
+| **설치** | Python + Chrome 필요 | 불필요 (웹 접속만) |
+| **봇 탐지 우회** | undetected-chromedriver | headless Chromium |
+| **CAPTCHA** | 브라우저에서 직접 해결 가능 | 자동 수집 중단 + 안내 |
+| **쿠팡 수집** | 안정적 | Access Denied 가능성 있음 |
+| **네이버 수집** | 안정적 | CAPTCHA 발생 시 제한 |
+
 ## 프로젝트 구조
 
 ```
 coupang-insight-analyzer/
-├── app.py                      # Streamlit 메인 앱
+├── app.py                      # Streamlit 메인 앱 (로컬용)
+├── app_cloud.py                # Streamlit 메인 앱 (클라우드용)
 ├── config/
 │   ├── settings.py             # 상수 및 설정
 │   ├── selectors.py            # 쿠팡 CSS 셀렉터
 │   └── naver_selectors.py      # 네이버 CSS 셀렉터
 ├── crawler/
-│   ├── browser.py              # 브라우저 관리 (쿠팡/네이버)
+│   ├── browser.py              # 브라우저 관리 - 로컬 (undetected-chromedriver)
+│   ├── browser_cloud.py        # 브라우저 관리 - 클라우드 (headless Chromium)
 │   ├── url_parser.py           # URL 파싱
 │   ├── product_page.py         # 쿠팡 상품 정보 수집
 │   ├── review_scraper.py       # 쿠팡 리뷰 수집
@@ -101,6 +127,7 @@ coupang-insight-analyzer/
 ├── utils/
 │   ├── validators.py           # URL/API 키 검증
 │   └── text_cleaner.py         # 텍스트 정제
+├── packages.txt                # Streamlit Cloud용 apt 패키지
 └── requirements.txt
 ```
 
@@ -114,9 +141,8 @@ coupang-insight-analyzer/
 
 ## 주의사항
 
-- 이 앱은 **로컬 실행 전용**입니다 (Chrome 브라우저 GUI 필요)
-- 크롤링 시 실제 Chrome 창이 열립니다
-- 네이버 CAPTCHA 발생 시 사용자가 직접 풀어야 합니다
+- 로컬 실행 시 Chrome 브라우저 GUI 창이 열립니다
+- 네이버 CAPTCHA 발생 시: 로컬은 직접 풀기 가능, 클라우드는 수집 중단
 - API 키는 코드에 저장되지 않으며, 실행 시 직접 입력합니다
 - 과도한 크롤링은 IP 차단 원인이 될 수 있으니 적절히 사용해주세요
 
