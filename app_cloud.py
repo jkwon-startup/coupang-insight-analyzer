@@ -110,14 +110,14 @@ def main():
     st.subheader("AI 모델 선택")
     col1, col2 = st.columns(2)
     with col1:
-        use_openai = st.checkbox("OpenAI o4-mini", value=True)
+        use_claude = st.checkbox("Anthropic Claude", value=True)
     with col2:
-        use_claude = st.checkbox("Anthropic Claude", value=False)
+        use_openai = st.checkbox("OpenAI o4-mini", value=False)
 
-    if use_openai:
-        openai_key = st.text_input("OpenAI API Key", type="password")
     if use_claude:
         claude_key = st.text_input("Anthropic API Key", type="password")
+    if use_openai:
+        openai_key = st.text_input("OpenAI API Key", type="password")
 
     st.subheader("분석 옵션")
     col_a, col_b, col_c, col_d = st.columns(4)
@@ -140,16 +140,16 @@ def main():
             st.error("최소 하나의 AI 모델을 선택해주세요.")
             return
 
-        if use_openai:
-            key_valid, key_msg = validate_api_key(openai_key, "openai")
-            if not key_valid:
-                st.error(f"OpenAI: {key_msg}")
-                return
-
         if use_claude:
             key_valid, key_msg = validate_api_key(claude_key, "claude")
             if not key_valid:
                 st.error(f"Claude: {key_msg}")
+                return
+
+        if use_openai:
+            key_valid, key_msg = validate_api_key(openai_key, "openai")
+            if not key_valid:
+                st.error(f"OpenAI: {key_msg}")
                 return
 
         if not any([do_story, do_review, do_qna, do_full]):
@@ -157,10 +157,10 @@ def main():
             return
 
         ai_configs = []
-        if use_openai:
-            ai_configs.append(("openai", openai_key, "OpenAI o4-mini"))
         if use_claude:
             ai_configs.append(("claude", claude_key, "Anthropic Claude"))
+        if use_openai:
+            ai_configs.append(("openai", openai_key, "OpenAI o4-mini"))
 
         run_analysis(url, platform, ai_configs, do_story, do_review, do_qna, do_full)
 
